@@ -1,3 +1,6 @@
+// this below code gives stores the data in single table called school and stores 3 classes data class6,class7, class8 and gives it to the output , the class details we need
+
+
 package models
 
 import (
@@ -126,3 +129,96 @@ func (c *School) AfterFind(tx *gorm.DB) (err error) {
 
 	return nil
 }
+
+
+//The below code stores data in single table school but it stores all the class details that the user gives ...
+
+package models
+
+import (
+	"encoding/json"
+
+	"github.com/jinzhu/gorm"
+)
+
+type School struct {
+	gorm.Model
+	Name          string        `json:"name"`
+	SchoolId      string        `json:"school_id"`
+	SchoolAddress SchoolAddress `gorm:"embedded" json:"school_address"`
+	Classes       []Class       `gorm:"-" json:"classes"`
+	ClassesJSON   string        `gorm:"column:classes_json" json:"-"`
+}
+
+type SchoolAddress struct {
+	Street  string `json:"street"`
+	City    string `json:"city"`
+	State   string `json:"state"`
+	ZipCode string `json:"zip_code"`
+}
+
+type Class struct {
+	ClassName    string    `json:"class_name"`
+	Students     []Student `gorm:"-" json:"students"`
+	StudentsJSON string    `gorm:"column:students_json" json:"-"`
+}
+
+type Student struct {
+	Name          string   `json:"name"`
+	Age           int      `json:"age"`
+	AddressStruct *Address `json:"address" gorm:"-"`
+	AddressDb     string   `json:"-" gorm:"student_address"`
+}
+
+type Address struct {
+	Street  string `json:"street"`
+	City    string `json:"city"`
+	State   string `json:"state"`
+	ZipCode string `json:"zip_code"`
+}
+
+func (s *School) BeforeSave(tx *gorm.DB) (err error) {
+	if len(s.Classes) > 0 {
+		for i, class := range s.Classes {
+			if len(class.Students) > 0 {
+				data, err := json.Marshal(class.Students)
+				if err != nil {
+					return err
+				}
+				s.Classes[i].StudentsJSON = string(data)
+				for j, student := range class.Students {
+					if student.AddressStruct != nil {
+						data, err := json.Marshal(student.AddressStruct)
+						if err != nil {
+							return err
+						}
+						s.Classes[i].Students[j].AddressDb = string(data)
+					}
+				}
+			}
+		}
+		data, err := json.Marshal(s.Classes)
+		if err != nil {
+			return err
+		}
+		s.ClassesJSON = string(data)
+	}
+	return nil
+}
+
+func (s *School) AfterFind(tx *gorm.DB) (err error) {
+	if s.ClassesJSON != "" {
+		if err := json.Unmarshal([]byte(s.ClassesJSON), &s.Classes); err != nil {
+			return err
+		}
+		for i, class := range s.Classes {
+			if class.StudentsJSON != "" {
+				if err := json.Unmarshal([]byte(class.StudentsJSON), &s.Classes[i].Students); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
